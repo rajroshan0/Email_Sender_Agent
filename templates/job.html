@@ -1,0 +1,42 @@
+{% extends "base.html" %}{% block title %}{{ j.name }}{% endblock %}
+{% block body %}
+{% set tot = counts.values()|sum - counts.skipped %}
+<h1>{{ j.name }} <span id="st" class="badge s-{{ j.status }}">{{ j.status }}</span></h1>
+<div class="hint">From {{ j.account_email or '(account removed)' }} · created {{ j.created_at|fmt }} · {{ nfiles }} attachment file(s) uploaded</div>
+<div id="note" class="flash err" {% if not j.note %}style="display:none"{% endif %}>{{ j.note }}</div>
+<div class="stats">
+{% for k in ['sent','pending','failed','skipped','uncertain'] %}<div class="stat"><b id="c-{{ k }}">{{ counts[k] }}</b><span>{{ k }}</span></div>{% endfor %}
+</div>
+<div class="bar"><i id="bar" style="width:{{ (100*counts.sent/tot)|round if tot else 0 }}%"></i></div>
+<div class="actions">
+{% if j.status == 'running' %}
+<form method="post" action="{{ url_for('job_stop', jid=j.id) }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn sec">Pause</button></form>
+{% else %}
+<form method="post" action="{{ url_for('job_send', jid=j.id) }}" data-confirm="Send {{ counts.pending }} email(s) now from {{ j.account_email }}?"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn" {% if not counts.pending %}disabled{% endif %}>{{ 'Resume' if j.status in ('paused','stopped') else 'Send ' ~ counts.pending ~ ' email(s)' }}</button></form>
+{% if counts.failed %}<form method="post" action="{{ url_for('job_retry', jid=j.id) }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn sec">Retry failed</button></form>{% endif %}
+<form method="post" action="{{ url_for('job_delete', jid=j.id) }}" data-confirm="Delete this send?"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn bad">Delete</button></form>
+{% endif %}
+</div>
+<h2>Preview (first email)</h2>
+<iframe src="{{ url_for('job_preview', jid=j.id) }}" title="Email preview"></iframe>
+<h2>Recipients</h2>
+<table><thead><tr><th>Row</th><th>Email</th><th>Name</th><th>Status</th><th>Details</th></tr></thead><tbody id="rows">{% include "_rows.html" %}</tbody></table>
+{% endblock %}
+{% block scripts %}{% if j.status == 'running' %}
+<script nonce="{{ nonce }}">
+(function(){
+  var id = {{ j.id }};
+  function tick(){
+    fetch('/job/'+id+'/status',{credentials:'same-origin'}).then(function(r){return r.json()}).then(function(d){
+      Object.keys(d.counts).forEach(function(k){var el=document.getElementById('c-'+k); if(el) el.textContent=d.counts[k];});
+      var tot=0; Object.keys(d.counts).forEach(function(k){ if(k!=='skipped') tot+=d.counts[k]; });
+      document.getElementById('bar').style.width = (tot? Math.round(100*d.counts.sent/tot):0)+'%';
+      return fetch('/job/'+id+'/rows',{credentials:'same-origin'}).then(function(r){return r.text()}).then(function(h){
+        document.getElementById('rows').innerHTML=h;
+        if(d.status!=='running'){ location.reload(); } else { setTimeout(tick,3000); }
+      });
+    }).catch(function(){ setTimeout(tick,6000); });
+  }
+  setTimeout(tick,2000);
+})();
+</script>{% endif %}{% endblock %}

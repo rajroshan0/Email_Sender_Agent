@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% block title %}New send{% endblock %}
+{% block body %}
+<h1>New send</h1>
+{% if not accounts %}<div class="flash err">Connect a Gmail account first on the <a href="{{ url_for('accounts') }}">Gmail accounts</a> page.</div>{% endif %}
+<form class="card" method="post" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+<label>Name (only for you, optional)</label><input type="text" name="name" maxlength="200" placeholder="e.g. October creators">
+<label>Send from</label>
+<select name="account_id" required>{% for a in accounts %}<option value="{{ a[0] }}">{{ a[1] }}</option>{% endfor %}</select>
+<label>CSV file</label><input type="file" name="csv" accept=".csv,text/csv" required>
+<div class="hint">Columns: <code>receiver_email</code>, <code>message</code> (required); <code>name</code>, <code>greeting</code>, <code>subject</code>, <code>attachment</code> (optional). Save as CSV UTF-8. Up to 1000 rows.</div>
+<label>Attachments (optional)</label><input type="file" name="files" multiple>
+<div class="hint">Upload every file named in the <code>attachment</code> column (use ; between several). Max 10 MB per file, 20 MB total.</div>
+<label class="chk"><input type="checkbox" name="skip_sent" value="1" checked> Skip people already emailed before (from any account)</label>
+<div class="actions"><button class="btn" {% if not accounts %}disabled{% endif %}>Create &amp; preview</button></div>
+</form>
+{% endblock %}

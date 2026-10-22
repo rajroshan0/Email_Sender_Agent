@@ -1,0 +1,38 @@
+{% extends "base.html" %}{% block title %}Design &amp; settings{% endblock %}
+{% block body %}
+<h1>Design &amp; settings</h1>
+<form class="card" method="post" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+<h2 style="margin-top:0">Sender &amp; header</h2>
+<div class="row"><div><label>Brand name</label><input type="text" name="BRAND_NAME" value="{{ S.BRAND_NAME }}"></div>
+<div><label>Sender name (shown in inbox)</label><input type="text" name="FROM_NAME" value="{{ S.FROM_NAME }}"></div>
+<div><label>Header title</label><input type="text" name="TITLE" value="{{ S.TITLE }}"></div>
+<div><label>Header subtitle</label><input type="text" name="SUBTITLE" value="{{ S.SUBTITLE }}"></div>
+<div><label>Reply-To (optional)</label><input type="text" name="REPLY_TO" value="{{ S.REPLY_TO }}"><div class="hint">Empty = replies go to the sending Gmail.</div></div>
+<div><label>Default subject</label><input type="text" name="DEFAULT_SUBJECT" value="{{ S.DEFAULT_SUBJECT }}"><div class="hint">Used when a row has no subject.</div></div></div>
+<h2>Logo</h2>
+<div class="row"><div><label>Upload logo (PNG or JPG, under 1 MB)</label><input type="file" name="logo" accept="image/png,image/jpeg">
+{% if has_logo %}<label class="chk"><input type="checkbox" name="remove_logo" value="1"> Remove the current logo</label>{% endif %}</div>
+<div><label>or public logo link (https://, optional)</label><input type="text" name="LOGO_URL" value="{{ S.LOGO_URL }}"><div class="hint">If set, the link is used instead of the uploaded file.</div></div></div>
+<label class="chk"><input type="checkbox" name="SHOW_BRAND_NAME_WITH_LOGO" value="1" {% if S.SHOW_BRAND_NAME_WITH_LOGO == '1' %}checked{% endif %}> Show the brand name under the logo</label>
+<h2>Text</h2>
+<div class="row"><div><label>Greeting (with name)</label><input type="text" name="GREETING" value="{{ S.GREETING }}"><div class="hint">{name} is replaced by the name column.</div></div>
+<div><label>Greeting (no name)</label><input type="text" name="GREETING_NO_NAME" value="{{ S.GREETING_NO_NAME }}"></div>
+<div><label>Sign-off</label><input type="text" name="SIGN_OFF" value="{{ S.SIGN_OFF }}"></div>
+<div><label>Signed by</label><input type="text" name="SIGNER" value="{{ S.SIGNER }}"></div></div>
+<label class="chk"><input type="checkbox" name="FIRST_NAME_ONLY" value="1" {% if S.FIRST_NAME_ONLY == '1' %}checked{% endif %}> Use only the first word of the name ("Hi Sweta," instead of "Hi Sweta Dahal,")</label>
+<h2>Contact button &amp; footer</h2>
+<div class="row"><div><label>Button text</label><input type="text" name="BUTTON_TEXT" value="{{ S.BUTTON_TEXT }}"></div>
+<div><label>Button link</label><input type="text" name="BUTTON_LINK" value="{{ S.BUTTON_LINK }}"><div class="hint">https://wa.me/..., https://yoursite.com or mailto:you@example.com</div></div></div>
+<label>Footer lines (one per line)</label><textarea name="FOOTER_LINES">{{ S.FOOTER_LINES }}</textarea>
+<label>Unsubscribe line</label><input type="text" name="UNSUBSCRIBE_TEXT" value="{{ S.UNSUBSCRIBE_TEXT }}">
+<h2>Colors (two)</h2>
+<div class="row"><div><label>Main (header, headings)</label><input type="text" name="COLOR_MAIN" value="{{ S.COLOR_MAIN }}"></div>
+<div><label>Accent (button, lines)</label><input type="text" name="COLOR_ACCENT" value="{{ S.COLOR_ACCENT }}"></div></div>
+<h2>Sending limits</h2>
+<div class="row"><div><label>Pause between emails (seconds)</label><input type="text" name="DELAY_SECONDS" value="{{ S.DELAY_SECONDS }}"></div>
+<div><label>Max emails per account per 24 hours</label><input type="text" name="DAILY_LIMIT" value="{{ S.DAILY_LIMIT }}"><div class="hint">Gmail allows about 500 (free) or 2000 (Workspace). Sending pauses at this number.</div></div></div>
+<div class="actions"><button class="btn">Save settings</button></div>
+</form>
+<h2>Preview with saved settings</h2>
+<iframe src="{{ url_for('preview_sample') }}" title="Preview"></iframe>
+{% endblock %}

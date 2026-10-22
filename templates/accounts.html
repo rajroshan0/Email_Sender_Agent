@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block title %}Gmail accounts{% endblock %}
+{% block body %}
+<h1>Gmail accounts</h1>
+<div class="card">
+{% if accounts %}<table><tr><th>Account</th><th>Connected</th><th></th></tr>
+{% for a in accounts %}<tr><td>{{ a.email }}</td><td>{{ a.created_at|fmt }}</td><td>
+<form method="post" action="{{ url_for('account_delete', aid=a.id) }}" data-confirm="Remove this account?"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn bad" style="padding:4px 12px">Remove</button></form></td></tr>{% endfor %}</table>
+{% else %}<p>No accounts connected yet.</p>{% endif %}
+<form method="post" action="{{ url_for('oauth_start') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+<div class="actions"><button class="btn" {% if not oauth_ready %}disabled{% endif %}>+ Connect a Gmail account</button></div></form>
+<p class="hint">You will be sent to Google to log in and allow "send email". Repeat for every account the team wants to send from. The login is stored encrypted; passwords are never seen.</p>
+</div>
+{% if not oauth_ready %}<div class="flash err">Google login is not set up yet: add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Render (see README).</div>{% endif %}
+<div class="card"><b>Google Cloud setting</b><p class="hint">In your OAuth client (type: Web application), the authorized redirect URI must be exactly:</p><p><code>{{ redirect_uri }}</code></p></div>
+{% endblock %}

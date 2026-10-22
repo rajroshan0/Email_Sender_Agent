@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}Email Sender{% endblock %}</title>
+<style>
+:root{--navy:#12263F;--gold:#C8963E;--bg:#f2f4f7;--line:#dde1e7;--ok:#1d7a46;--bad:#b3261e}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:#222;font:15px/1.5 -apple-system,Segoe UI,Helvetica,Arial,sans-serif}
+header{background:var(--navy);color:#fff;border-bottom:3px solid var(--gold)}
+header .in{max-width:1000px;margin:0 auto;padding:12px 16px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+header b{letter-spacing:2px;text-transform:uppercase;font-size:14px}
+header a{color:#fff;text-decoration:none;opacity:.85}header a:hover{opacity:1}
+header form{margin:0 0 0 auto}
+main{max-width:1000px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:22px;color:var(--navy);margin:6px 0 16px}h2{font-size:17px;color:var(--navy);margin:24px 0 8px}
+.card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:18px;margin-bottom:16px}
+label{display:block;font-weight:600;margin:12px 0 4px;font-size:14px}
+input[type=text],input[type=password],input[type=number],select,textarea,input[type=file]{width:100%;padding:9px 10px;border:1px solid #c5cad3;border-radius:6px;font:inherit;background:#fff}
+textarea{min-height:90px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}@media(max-width:700px){.row{grid-template-columns:1fr}}
+.hint{color:#667;font-size:13px;margin-top:3px}
+.btn{display:inline-block;border:0;border-radius:6px;padding:9px 18px;font:inherit;font-weight:700;cursor:pointer;background:var(--gold);color:var(--navy);text-decoration:none}
+.btn.sec{background:#e8ebf0;color:var(--navy)}.btn.bad{background:#fbe9e7;color:var(--bad)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}.actions form{margin:0}
+table{width:100%;border-collapse:collapse;background:#fff}th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;font-size:14px}
+th{background:#f7f8fa;color:#556}
+.badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:700;background:#e8ebf0;color:#445}
+.s-sent,.s-done{background:#e3f4ea;color:var(--ok)}.s-failed,.s-stopped,.s-uncertain{background:#fbe9e7;color:var(--bad)}
+.s-running,.s-sending{background:#fff3d6;color:#8a5a00}.s-skipped{background:#eee;color:#666}
+.flash{padding:10px 14px;border-radius:6px;margin-bottom:12px}.flash.ok{background:#e3f4ea;color:var(--ok)}.flash.err{background:#fbe9e7;color:var(--bad)}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}.stat{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 14px;min-width:90px}
+.stat b{display:block;font-size:20px;color:var(--navy)}.stat span{font-size:12px;color:#667}
+.bar{height:10px;background:#e3e6eb;border-radius:99px;overflow:hidden}.bar i{display:block;height:100%;background:var(--gold);width:0}
+iframe{width:100%;height:720px;border:1px solid var(--line);border-radius:8px;background:#fff}
+code{background:#eef0f4;padding:1px 5px;border-radius:4px;font-size:13px}
+.chk{display:flex;gap:8px;align-items:center;font-weight:400;margin:10px 0}.chk input{width:auto}
+</style></head><body>
+{% if session.get('auth') %}
+<header><div class="in"><b>Email Sender</b>
+<a href="{{ url_for('index') }}">Sends</a><a href="{{ url_for('new_job') }}">New send</a>
+<a href="{{ url_for('accounts') }}">Gmail accounts</a><a href="{{ url_for('settings') }}">Design &amp; settings</a>
+<form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn sec" style="padding:5px 12px">Log out</button></form>
+</div></header>{% endif %}
+<main>
+{% with msgs = get_flashed_messages(with_categories=true) %}{% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}{% endwith %}
+{% block body %}{% endblock %}
+</main>
+<script nonce="{{ nonce }}">document.addEventListener('submit',function(e){var m=e.target.getAttribute('data-confirm');if(m&&!confirm(m))e.preventDefault();});</script>
+{% block scripts %}{% endblock %}
+</body></html>

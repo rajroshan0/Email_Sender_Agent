@@ -1,0 +1,3 @@
+{% for r in rows %}<tr><td>{{ r.row_no }}</td><td>{{ r.email }}</td><td>{{ r.name }}</td>
+<td><span class="badge s-{{ r.status }}">{{ r.status }}</span></td><td>{{ r.detail }}{% if r.attachments %}<div class="hint">📎 {{ r.attachments }}</div>{% endif %}</td></tr>
+{% endfor %}

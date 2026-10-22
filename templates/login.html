@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% block title %}Log in{% endblock %}
+{% block body %}
+<div class="card" style="max-width:380px;margin:60px auto">
+<h1>Email Sender</h1>
+{% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+<form method="post"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+<label for="p">Team password</label><input id="p" type="password" name="password" autofocus autocomplete="current-password" required>
+<div class="actions"><button class="btn">Log in</button></div></form></div>
+{% endblock %}

@@ -1,0 +1,26 @@
+# Render Blueprint (free web service + an external free Postgres such as Neon or Supabase).
+services:
+  - type: web
+    name: email-sender
+    runtime: python
+    plan: free               # sleeps after 15 min without visits; opening the page wakes it (~1 min)
+    buildCommand: pip install -r requirements.txt
+    # ONE worker on purpose: the background sender lives inside it.
+    startCommand: gunicorn app:app --workers 1 --threads 4 --timeout 120 --bind 0.0.0.0:$PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: DATABASE_URL              # connection string of your free Postgres (see README)
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: TOKEN_ENCRYPTION_KEY     # never change this after connecting accounts
+        generateValue: true
+      - key: APP_PASSWORD              # the shared team password: you type it in Render
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      # optional: BASE_URL (only if you use your own domain, e.g. https://mail.example.com)

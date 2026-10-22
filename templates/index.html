@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Sends</h1>
+{% if not n_accounts %}<div class="flash err">No Gmail account connected yet. <a href="{{ url_for('accounts') }}">Connect one</a> first.</div>{% endif %}
+<div class="actions" style="margin:0 0 14px"><a class="btn" href="{{ url_for('new_job') }}">+ New send</a></div>
+{% if jobs %}
+<table><tr><th>#</th><th>Name</th><th>From</th><th>Status</th><th>Sent</th><th>Created</th></tr>
+{% for j in jobs %}{% set c = counts[j.id] %}{% set tot = c.values()|sum - c.skipped %}
+<tr><td>{{ j.id }}</td><td><a href="{{ url_for('job', jid=j.id) }}">{{ j.name }}</a></td>
+<td>{{ j.account_email or '(removed)' }}</td><td><span class="badge s-{{ j.status }}">{{ j.status }}</span></td>
+<td>{{ c.sent }} / {{ tot }}{% if c.failed %} · <span style="color:var(--bad)">{{ c.failed }} failed</span>{% endif %}</td>
+<td>{{ j.created_at|fmt }}</td></tr>{% endfor %}</table>
+{% else %}<div class="card">No sends yet. Press <b>New send</b> to start.</div>{% endif %}
+{% endblock %}
