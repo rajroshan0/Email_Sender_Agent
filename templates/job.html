@@ -18,7 +18,7 @@
 {% endif %}
 </div>
 <h2>Preview (first email)</h2>
-<iframe src="{{ url_for('job_preview', jid=j.id) }}" title="Email preview"></iframe>
+<iframe sandbox src="{{ url_for('job_preview', jid=j.id) }}" title="Email preview"></iframe>
 <h2>Recipients</h2>
 <table><thead><tr><th>Row</th><th>Email</th><th>Name</th><th>Status</th><th>Details</th></tr></thead><tbody id="rows">{% include "_rows.html" %}</tbody></table>
 {% endblock %}

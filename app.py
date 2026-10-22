@@ -1,7 +1,9 @@
 """Team email sender: password-protected web app that sends branded emails through Gmail."""
+import base64
 import csv
 import hmac
 import io
+import json
 import logging
 import mimetypes
 import os
@@ -169,6 +171,11 @@ def validate_settings(form):
         out["DAILY_LIMIT"] = str(n)
     except (ValueError, AssertionError):
         errs.append("Daily limit must be a whole number from 1 to 2000")
+    tpl = form.get("TEMPLATE", "classic")
+    if tpl not in ("classic", "minimal"):
+        errs.append("Choose a design")
+        tpl = "classic"
+    out["TEMPLATE"] = tpl
     out["SHOW_BRAND_NAME_WITH_LOGO"] = "1" if form.get("SHOW_BRAND_NAME_WITH_LOGO") else "0"
     out["FIRST_NAME_ONLY"] = "1" if form.get("FIRST_NAME_ONLY") else "0"
     return out, errs
@@ -291,11 +298,18 @@ def logo():
     return Response(lg[1], mimetype=lg[0], headers={"Cache-Control": "private, max-age=60"})
 
 
+def logo_src_for(S):
+    """For previews: the logo as a data: link (so the preview needs no login)."""
+    if S["LOGO_URL"]:
+        return S["LOGO_URL"]
+    lg = get_logo()
+    return f"data:{lg[0]};base64,{base64.b64encode(lg[1]).decode()}" if lg else ""
+
+
 def preview_response(row, S):
-    logo_src = S["LOGO_URL"] or (url_for("logo") if get_logo() else "")
-    resp = Response(build_html(row, S, logo_src), mimetype="text/html")
+    resp = Response(build_html(row, S, logo_src_for(S)), mimetype="text/html")
     resp.headers["Content-Security-Policy"] = (
-        "default-src 'none'; img-src 'self' https: data:; style-src 'unsafe-inline'; frame-ancestors 'self'")
+        "default-src 'none'; img-src https: data:; style-src 'unsafe-inline'; frame-ancestors 'self'")
     return resp
 
 
@@ -399,20 +413,41 @@ def account_delete(aid):
 
 
 # ------------------------------------------------------------------ new job
-def parse_csv(data):
-    try:
-        text = data.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        return None, "The CSV must be saved as UTF-8 (in Excel: Save as, CSV UTF-8)."
-    reader = csv.DictReader(io.StringIO(text, newline=""))
-    if not reader.fieldnames:
-        return None, "The CSV is empty."
-    heads = {(h or "").strip().lower() for h in reader.fieldnames}
-    if not heads & {"receiver_email", "receiver", "email", "to"}:
-        return None, "The CSV needs a receiver_email column."
-    if not heads & {"message", "text"}:
-        return None, "The CSV needs a message column."
+EMAIL_KEYS = ("receiver_email", "receiver", "email", "to")
+OVERRIDE_KEYS = ["TEMPLATE", "TITLE", "SUBTITLE", "BUTTON_TEXT", "BUTTON_LINK",
+                 "DEFAULT_SUBJECT", "COLOR_MAIN", "COLOR_ACCENT"]
+MAX_PASTE = 2 * 1024 * 1024
+
+
+def parse_table(text):
+    """Pasted table (from Excel / Google Sheets = tab separated) or CSV, or just a list of emails."""
+    text = (text or "").replace("\r\n", "\n").replace("\r", "\n").lstrip("\ufeff").strip("\n")
+    if not text.strip():
+        return [], ""
+    first = text.split("\n", 1)[0]
+    if "\t" in first:
+        delim = "\t"
+    elif first.count(";") > first.count(","):
+        delim = ";"
+    else:
+        delim = ","
+    heads = {h.strip().lower() for h in next(csv.reader([first], delimiter=delim), [])}
     rows = []
+    if not heads & set(EMAIL_KEYS):
+        # no header row: accept a plain list of email addresses
+        lines = [l for l in text.split("\n") if l.strip()]
+        if not all("@" in l for l in lines):
+            return None, ("The first row must be column names, for example: name, receiver_email, message "
+                          "(or paste only email addresses, one per line).")
+        for i, line in enumerate(lines, start=1):
+            for tok in re.split(r"[,;\s]+", line):
+                if tok:
+                    rows.append({"row_no": i, "email": clean_line(tok), "name": "", "greeting": "",
+                                 "subject": "", "message": "", "attachments": ""})
+        if len(rows) > MAX_ROWS:
+            return None, f"Too many rows (max {MAX_ROWS} per send). Split the list."
+        return rows, ""
+    reader = csv.DictReader(io.StringIO(text, newline=""), delimiter=delim)
     for i, raw in enumerate(reader, start=2):
         r = {(k or "").strip().lower(): (v or "") for k, v in raw.items() if k is not None}
         if not any(v.strip() for v in r.values()):
@@ -423,13 +458,71 @@ def parse_csv(data):
                 if r.get(k, "").strip():
                     return r[k].strip() if multiline else clean_line(r[k])
             return ""
-        rows.append({"row_no": i, "email": pick("receiver_email", "receiver", "email", "to"),
-                     "name": pick("name"), "greeting": pick("greeting"), "subject": pick("subject"),
+        rows.append({"row_no": i, "email": pick(*EMAIL_KEYS), "name": pick("name"),
+                     "greeting": pick("greeting"), "subject": pick("subject"),
                      "message": pick("message", "text", multiline=True),
                      "attachments": ";".join(x.strip() for x in pick("attachment", "attachments").split(";") if x.strip())})
         if len(rows) > MAX_ROWS:
-            return None, f"Too many rows (max {MAX_ROWS} per send). Split the file."
+            return None, f"Too many rows (max {MAX_ROWS} per send). Split the list."
     return rows, ""
+
+
+def analyze_recipients(text, common, attach_names, done):
+    """Returns (rows, error). Each row gets status pending/skipped + detail."""
+    rows, err = parse_table(text)
+    if err:
+        return None, err
+    seen, out = set(), []
+    for r in rows:
+        status, detail = "pending", ""
+        if not r["message"] and common:
+            r = {**r, "message": common}
+        if not EMAIL_RE.match(r["email"]):
+            status, detail = "skipped", "Not a valid email address"
+        elif r["email"].lower() in seen:
+            status, detail = "skipped", "Listed twice"
+        elif not r["message"]:
+            status, detail = "skipped", "No message (write one in the message box or add a message column)"
+        elif r["email"].lower() in done:
+            status, detail = "skipped", "Already emailed before"
+        else:
+            missing = [a for a in r["attachments"].split(";") if a and a.lower() not in attach_names]
+            if missing:
+                status, detail = "skipped", "Attachment not uploaded: " + ", ".join(missing)
+        if status == "pending":
+            seen.add(r["email"].lower())
+        out.append({**r, "status": status, "detail": detail})
+    return out, ""
+
+
+def read_overrides(form, S):
+    """Per-send design choices. Invalid values fall back to the saved setting and are reported."""
+    ov, errs = {}, []
+    for k in OVERRIDE_KEYS:
+        ov[k] = clean_line(form.get(k, S[k]))[:300]
+    label = lambda k: k.replace("_", " ").title()
+    if ov["TEMPLATE"] not in ("classic", "minimal"):
+        errs.append("Choose a design")
+        ov["TEMPLATE"] = S["TEMPLATE"]
+    for k in ("TITLE", "SUBTITLE", "BUTTON_TEXT", "DEFAULT_SUBJECT"):
+        if not ov[k]:
+            errs.append(f"{label(k)} cannot be empty")
+            ov[k] = S[k]
+    if not LINK_RE.match(ov["BUTTON_LINK"]):
+        errs.append("Button link must start with https://, http:// or mailto:")
+        ov["BUTTON_LINK"] = S["BUTTON_LINK"]
+    for k in ("COLOR_MAIN", "COLOR_ACCENT"):
+        if not COLOR_RE.match(ov[k]):
+            errs.append(f"{label(k)} must look like #12263F")
+            ov[k] = S[k]
+    S2 = dict(S)
+    S2.update(ov)
+    return S2, ov, errs
+
+
+def sent_set(conn):
+    return {e for (e,) in conn.execute(select(func.lower(recipients_t.c.email))
+                                       .where(recipients_t.c.status == "sent"))}
 
 
 def safe_filename(name):
@@ -438,12 +531,25 @@ def safe_filename(name):
     return name[:200]
 
 
+def form_values(form, S):
+    v = {k: form.get(k, S[k]) for k in OVERRIDE_KEYS}
+    v.update(COMMON_MESSAGE=form.get("COMMON_MESSAGE", ""), recipients=form.get("recipients", ""),
+             name=form.get("name", ""), skip_sent=(form.get("skip_sent") == "1") if form else True,
+             account_id=form.get("account_id", ""))
+    return v
+
+
 @app.route("/new", methods=["GET", "POST"])
 def new_job():
+    S = get_settings()
     with engine.connect() as c:
         accts = c.execute(select(accounts_t.c.id, accounts_t.c.email).order_by(accounts_t.c.id)).all()
+
+    def page(status=200):
+        return render_template("new.html", accounts=accts, v=form_values(request.form, S)), status
+
     if request.method == "GET":
-        return render_template("new.html", accounts=accts)
+        return page()
 
     try:
         account_id = int(request.form.get("account_id", ""))
@@ -451,15 +557,12 @@ def new_job():
         account_id = 0
     if account_id not in [a[0] for a in accts]:
         flash("Choose a sender Gmail account (connect one on the Accounts page first).", "err")
-        return render_template("new.html", accounts=accts), 400
-    f = request.files.get("csv")
-    if not f or not f.filename:
-        flash("Choose a CSV file.", "err")
-        return render_template("new.html", accounts=accts), 400
-    rows, err = parse_csv(f.read(5 * 1024 * 1024))
-    if err:
-        flash(err, "err")
-        return render_template("new.html", accounts=accts), 400
+        return page(400)
+    S2, ov, errs = read_overrides(request.form, S)
+    if errs:
+        for e in errs:
+            flash(e, "err")
+        return page(400)
 
     files, total, seen_names = [], 0, set()
     for up in request.files.getlist("files"):
@@ -469,55 +572,71 @@ def new_job():
         data = up.read(MAX_FILE + 1)
         if len(data) > MAX_FILE:
             flash(f"{name} is larger than 10 MB.", "err")
-            return render_template("new.html", accounts=accts), 400
+            return page(400)
         total += len(data)
         if name.lower() in seen_names:
             flash(f"Two attachments are named {name}.", "err")
-            return render_template("new.html", accounts=accts), 400
+            return page(400)
         seen_names.add(name.lower())
         files.append({"filename": name, "data": data,
                       "mime": mimetypes.guess_type(name)[0] or "application/octet-stream"})
     if total > MAX_FILES_TOTAL:
         flash("Attachments are larger than 20 MB in total.", "err")
-        return render_template("new.html", accounts=accts), 400
+        return page(400)
 
-    skip_sent = bool(request.form.get("skip_sent"))
+    skip_sent = request.form.get("skip_sent") == "1"
     job_name = clean_line(request.form.get("name", ""))[:200] or f"Send {utcnow():%Y-%m-%d %H:%M}"
     with engine.begin() as c:
-        done = set()
-        if skip_sent:
-            done = {e for (e,) in c.execute(select(func.lower(recipients_t.c.email))
-                                            .where(recipients_t.c.status == "sent"))}
+        done = sent_set(c) if skip_sent else set()
+        rows, err = analyze_recipients(request.form.get("recipients", "")[:MAX_PASTE],
+                                       request.form.get("COMMON_MESSAGE", "").strip(), seen_names, done)
+        if err:
+            flash(err, "err")
+            return page(400)
+        if not rows:
+            flash("Paste at least one recipient.", "err")
+            return page(400)
         job_id = c.execute(insert(jobs_t).values(
             name=job_name, account_id=account_id, status="draft", skip_sent=skip_sent, note="",
-            created_at=utcnow())).inserted_primary_key[0]
-        seen, out = set(), []
-        for r in rows:
-            status, detail = "pending", ""
-            if not EMAIL_RE.match(r["email"]):
-                status, detail = "skipped", "Not a valid email address"
-            elif r["email"].lower() in seen:
-                status, detail = "skipped", "Listed twice in the file"
-            elif not r["message"]:
-                status, detail = "skipped", "No message"
-            elif r["email"].lower() in done:
-                status, detail = "skipped", "Already emailed before"
-            else:
-                missing = [a for a in r["attachments"].split(";") if a and a.lower() not in seen_names]
-                if missing:
-                    status, detail = "skipped", "Attachment not uploaded: " + ", ".join(missing)
-            if status == "pending":
-                seen.add(r["email"].lower())
-            out.append({**r, "job_id": job_id, "status": status, "detail": detail, "sent_at": None})
-        if out:
-            c.execute(insert(recipients_t), out)
+            options=json.dumps(ov), created_at=utcnow())).inserted_primary_key[0]
+        c.execute(insert(recipients_t), [{**r, "job_id": job_id, "sent_at": None} for r in rows])
         if files:
             c.execute(insert(job_files_t), [{**x, "job_id": job_id} for x in files])
     flash("Review the preview below, then press Send.", "ok")
     return redirect(url_for("job", jid=job_id))
 
 
-# ------------------------------------------------------------------ job pages
+@app.post("/preview/live")
+def preview_live():
+    S = get_settings()
+    S2, ov, errs = read_overrides(request.form, S)
+    common = request.form.get("COMMON_MESSAGE", "").strip()
+    names = {n.strip().lower() for n in request.form.get("file_names", "").split("\n") if n.strip()}
+    with engine.connect() as c:
+        done = sent_set(c) if request.form.get("skip_sent") == "1" else set()
+    rows, err = analyze_recipients(request.form.get("recipients", "")[:MAX_PASTE], common, names, done)
+    rows = rows or []
+    ready = [r for r in rows if r["status"] == "pending"]
+    skipped = [r for r in rows if r["status"] == "skipped"]
+    if ready:
+        row = dict(ready[0])
+    else:
+        row = dict(SAMPLE_ROW)
+        if common:
+            row["message"] = common
+    parts = []
+    if err:
+        parts.append(err)
+    if rows:
+        parts.append(f"{len(ready)} ready to send" + (f", {len(skipped)} skipped" if skipped else ""))
+        for r in skipped[:4]:
+            parts.append(f"Row {r['row_no']} ({r['email'] or 'empty'}): {r['detail']}")
+    else:
+        parts.append("Showing a sample. Paste recipients to see the first real email.")
+    parts += errs
+    return jsonify(html=build_html(row, S2, logo_src_for(S2)), summary="\n".join(parts))
+
+
 def load_job(c, jid):
     j = c.execute(select(jobs_t, accounts_t.c.email.label("account_email"))
                   .select_from(jobs_t.outerjoin(accounts_t, jobs_t.c.account_id == accounts_t.c.id))
@@ -556,6 +675,16 @@ def job_status(jid):
     return jsonify(status=j["status"], note=j["note"], counts=counts)
 
 
+def job_options(jid):
+    with engine.connect() as c:
+        raw = c.execute(select(jobs_t.c.options).where(jobs_t.c.id == jid)).scalar() or "{}"
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        data = {}
+    return {k: v for k, v in data.items() if k in OVERRIDE_KEYS and isinstance(v, str)}
+
+
 @app.route("/job/<int:jid>/preview")
 def job_preview(jid):
     with engine.connect() as c:
@@ -567,8 +696,8 @@ def job_preview(jid):
         return Response("<p style='font-family:sans-serif;padding:20px'>No valid emails in this send.</p>",
                         mimetype="text/html")
     S = get_settings()
-    resp = preview_response(dict(row), S)
-    return resp
+    S.update(job_options(jid))
+    return preview_response(dict(row), S)
 
 
 @app.post("/job/<int:jid>/send")
@@ -660,6 +789,7 @@ def run_job(jid):
 
 def _run_job(jid):
     S = get_settings()
+    S.update(job_options(jid))
     with engine.connect() as c:
         j = c.execute(select(jobs_t).where(jobs_t.c.id == jid)).mappings().first()
         acct = c.execute(select(accounts_t).where(accounts_t.c.id == j["account_id"])).mappings().first() if j else None

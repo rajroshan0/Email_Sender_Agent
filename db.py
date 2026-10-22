@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from cryptography.fernet import Fernet
 from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Integer, LargeBinary,
-                        MetaData, String, Table, Text, create_engine)
+                        MetaData, String, Table, Text, create_engine, inspect, text)
 
 
 def utcnow():
@@ -49,6 +49,7 @@ jobs_t = Table("jobs", metadata,
                Column("status", String(20), nullable=False),  # draft running paused stopped done
                Column("skip_sent", Boolean, nullable=False, default=True),
                Column("note", Text, nullable=False, default=""),
+               Column("options", Text, nullable=False, default="{}"),
                Column("created_at", DateTime, nullable=False))
 
 recipients_t = Table("recipients", metadata,
@@ -78,6 +79,11 @@ engine = make_engine()
 
 def init_db():
     metadata.create_all(engine)
+    # small migration: older databases have no jobs.options column
+    cols = {c["name"] for c in inspect(engine).get_columns("jobs")}
+    if "options" not in cols:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE jobs ADD COLUMN options TEXT NOT NULL DEFAULT '{}'"))
 
 
 def _fernet():

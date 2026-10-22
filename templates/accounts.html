@@ -11,5 +11,4 @@
 <p class="hint">You will be sent to Google to log in and allow "send email". Repeat for every account the team wants to send from. The login is stored encrypted; passwords are never seen.</p>
 </div>
 {% if not oauth_ready %}<div class="flash err">Google login is not set up yet: add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Render (see README).</div>{% endif %}
-<div class="card"><b>Google Cloud setting</b><p class="hint">In your OAuth client (type: Web application), the authorized redirect URI must be exactly:</p><p><code>{{ redirect_uri }}</code></p></div>
 {% endblock %}

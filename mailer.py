@@ -24,6 +24,7 @@ DEFAULTS = {
     "BUTTON_LINK": "mailto:you@yourbrand.com",
     "FOOTER_LINES": "you@yourbrand.com\n+000 000 000\nwww.yourbrand.com",
     "UNSUBSCRIBE_TEXT": 'Do not want these emails? Just reply with "unsubscribe" and I will remove you.',
+    "TEMPLATE": "classic",
     "COLOR_MAIN": "#12263F",
     "COLOR_ACCENT": "#C8963E",
     "DELAY_SECONDS": "3",
@@ -73,7 +74,7 @@ def plain_text(row, S):
                       "", S["UNSUBSCRIBE_TEXT"]])
 
 
-def build_html(row, S, logo_src):
+def _html_classic(row, S, logo_src):
     e = html.escape
     main, accent = S["COLOR_MAIN"], S["COLOR_ACCENT"]
     font = "Segoe UI,Helvetica,Arial,sans-serif"
@@ -128,6 +129,68 @@ def build_html(row, S, logo_src):
   </table>
 </td></tr></table>
 </body></html>"""
+
+
+def _html_minimal(row, S, logo_src):
+    """Design 2: clean, text-first, left aligned, no coloured header band."""
+    e = html.escape
+    main, accent = S["COLOR_MAIN"], S["COLOR_ACCENT"]
+    font = "Segoe UI,Helvetica,Arial,sans-serif"
+
+    text = fill(row["message"], display_name(row, S)).replace("\r\n", "\n")
+    paras = [p.strip() for p in text.split("\n\n") if p.strip()]
+    body = "".join(
+        f'<p style="margin:0 0 16px 0;font-size:16px;line-height:1.65;color:#333333;">'
+        f'{e(p).replace(chr(10), "<br>")}</p>' for p in paras)
+
+    logo = ""
+    if logo_src:
+        logo = (f'<img src="{e(logo_src)}" alt="{e(S["BRAND_NAME"])}" width="110" '
+                f'style="display:block;border:0;max-width:110px;height:auto;margin:0 0 10px 0;">')
+    brand = ""
+    if not logo_src or S["SHOW_BRAND_NAME_WITH_LOGO"] == "1":
+        brand = (f'<div style="font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;'
+                 f'color:{main};">{e(S["BRAND_NAME"])}</div>')
+    footer = " &nbsp;&#8226;&nbsp; ".join(e(x) for x in footer_lines(S))
+
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#ffffff;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;">
+<tr><td align="center" style="padding:28px 12px;">
+  <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;">
+    <tr><td style="border-top:4px solid {accent};padding:24px 4px 4px 4px;font-family:{font};">{logo}{brand}</td></tr>
+    <tr><td style="padding:22px 4px 0 4px;font-family:{font};">
+      <div style="font-size:28px;line-height:1.25;font-weight:700;color:{main};">{e(S["TITLE"])}</div>
+      <div style="font-size:16px;line-height:1.5;color:#6b7280;margin-top:6px;">{e(S["SUBTITLE"])}</div>
+      <div style="width:48px;height:3px;background:{accent};margin-top:18px;line-height:3px;font-size:0;">&nbsp;</div>
+    </td></tr>
+    <tr><td style="padding:24px 4px 4px 4px;font-family:{font};">
+      <p style="margin:0 0 16px 0;font-size:17px;font-weight:600;color:{main};">{e(greeting(row, S))}</p>
+      {body}
+    </td></tr>
+    <tr><td style="padding:8px 4px 26px 4px;font-family:{font};">
+      <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+        <td align="center" bgcolor="{main}" style="border-radius:4px;">
+          <a href="{e(S["BUTTON_LINK"])}" style="display:inline-block;padding:12px 28px;font-family:{font};font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;">{e(S["BUTTON_TEXT"])}</a>
+        </td></tr></table>
+    </td></tr>
+    <tr><td style="padding:0 4px 26px 4px;font-family:{font};font-size:16px;line-height:1.5;color:#333333;">
+      {e(S["SIGN_OFF"])}<br><strong style="color:{main};">{e(S["SIGNER"])}</strong>
+    </td></tr>
+    <tr><td style="padding:16px 4px 0 4px;border-top:1px solid #e5e7eb;font-family:{font};">
+      <div style="font-size:12px;color:#6b7280;line-height:1.6;">{e(S["BRAND_NAME"])} &nbsp;&#8226;&nbsp; {footer}</div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:8px;line-height:1.5;">{e(S["UNSUBSCRIBE_TEXT"])}</div>
+    </td></tr>
+  </table>
+</td></tr></table>
+</body></html>"""
+
+
+def build_html(row, S, logo_src):
+    if S.get("TEMPLATE") == "minimal":
+        return _html_minimal(row, S, logo_src)
+    return _html_classic(row, S, logo_src)
 
 
 def build_message(row, S, sender_email, logo=None, attachments=()):

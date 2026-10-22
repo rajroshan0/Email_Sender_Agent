@@ -25,6 +25,11 @@
 <div><label>Button link</label><input type="text" name="BUTTON_LINK" value="{{ S.BUTTON_LINK }}"><div class="hint">https://wa.me/..., https://yoursite.com or mailto:you@example.com</div></div></div>
 <label>Footer lines (one per line)</label><textarea name="FOOTER_LINES">{{ S.FOOTER_LINES }}</textarea>
 <label>Unsubscribe line</label><input type="text" name="UNSUBSCRIBE_TEXT" value="{{ S.UNSUBSCRIBE_TEXT }}">
+<h2>Design</h2>
+<label>Default design for new sends</label>
+<select name="TEMPLATE"><option value="classic" {% if S.TEMPLATE != 'minimal' %}selected{% endif %}>Classic: colored header band</option>
+<option value="minimal" {% if S.TEMPLATE == 'minimal' %}selected{% endif %}>Minimal: clean, text first</option></select>
+<div class="hint">The team can still choose the design on each send.</div>
 <h2>Colors (two)</h2>
 <div class="row"><div><label>Main (header, headings)</label><input type="text" name="COLOR_MAIN" value="{{ S.COLOR_MAIN }}"></div>
 <div><label>Accent (button, lines)</label><input type="text" name="COLOR_ACCENT" value="{{ S.COLOR_ACCENT }}"></div></div>
@@ -34,5 +39,5 @@
 <div class="actions"><button class="btn">Save settings</button></div>
 </form>
 <h2>Preview with saved settings</h2>
-<iframe src="{{ url_for('preview_sample') }}" title="Preview"></iframe>
+<iframe sandbox src="{{ url_for('preview_sample') }}" title="Preview"></iframe>
 {% endblock %}

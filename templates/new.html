@@ -1,16 +1,70 @@
 {% extends "base.html" %}{% block title %}New send{% endblock %}
+{% block head %}<style>main{max-width:1250px}</style>{% endblock %}
 {% block body %}
 <h1>New send</h1>
 {% if not accounts %}<div class="flash err">Connect a Gmail account first on the <a href="{{ url_for('accounts') }}">Gmail accounts</a> page.</div>{% endif %}
-<form class="card" method="post" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
-<label>Name (only for you, optional)</label><input type="text" name="name" maxlength="200" placeholder="e.g. October creators">
-<label>Send from</label>
-<select name="account_id" required>{% for a in accounts %}<option value="{{ a[0] }}">{{ a[1] }}</option>{% endfor %}</select>
-<label>CSV file</label><input type="file" name="csv" accept=".csv,text/csv" required>
-<div class="hint">Columns: <code>receiver_email</code>, <code>message</code> (required); <code>name</code>, <code>greeting</code>, <code>subject</code>, <code>attachment</code> (optional). Save as CSV UTF-8. Up to 1000 rows.</div>
+<div class="split">
+<form id="f" class="card" method="post" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+<div class="row"><div><label>Name (only for you, optional)</label><input type="text" name="name" maxlength="200" value="{{ v.name }}" placeholder="e.g. October creators"></div>
+<div><label>Send from</label>
+<select name="account_id" required>{% for a in accounts %}<option value="{{ a[0] }}" {% if v.account_id|string == a[0]|string %}selected{% endif %}>{{ a[1] }}</option>{% endfor %}</select></div></div>
+
+<h2 style="margin-top:18px">1. Choose a design</h2>
+<div class="designs">
+<label class="design"><input type="radio" name="TEMPLATE" value="classic" {% if v.TEMPLATE != 'minimal' %}checked{% endif %}><b>Classic</b><div class="hint">Logo on top, colored header band with title, gold button.</div></label>
+<label class="design"><input type="radio" name="TEMPLATE" value="minimal" {% if v.TEMPLATE == 'minimal' %}checked{% endif %}><b>Minimal</b><div class="hint">Clean and text first, left aligned, looks more personal.</div></label>
+</div>
+<div class="row"><div><label>Title</label><input type="text" name="TITLE" value="{{ v.TITLE }}"></div>
+<div><label>Subtitle</label><input type="text" name="SUBTITLE" value="{{ v.SUBTITLE }}"></div>
+<div><label>Button text</label><input type="text" name="BUTTON_TEXT" value="{{ v.BUTTON_TEXT }}"></div>
+<div><label>Button link</label><input type="text" name="BUTTON_LINK" value="{{ v.BUTTON_LINK }}"></div>
+<div><label>Main color</label><input type="color" name="COLOR_MAIN" value="{{ v.COLOR_MAIN }}"></div>
+<div><label>Accent color</label><input type="color" name="COLOR_ACCENT" value="{{ v.COLOR_ACCENT }}"></div></div>
+
+<h2>2. Write the message</h2>
+<label>Subject</label><input type="text" name="DEFAULT_SUBJECT" value="{{ v.DEFAULT_SUBJECT }}">
+<div class="hint">Used for everyone unless a row has its own <code>subject</code> column.</div>
+<label>Message for everyone</label>
+<textarea name="COMMON_MESSAGE" rows="8" placeholder="Write or paste your message. Use {name} to insert each person's name. Leave a blank line between paragraphs.">{{ v.COMMON_MESSAGE }}</textarea>
+<div class="hint">If a row has its own <code>message</code>, that one is used for that person.</div>
+
+<h2>3. Paste the recipients</h2>
+<label>Paste from Excel or Google Sheets (with the header row)</label>
+<textarea class="mono" name="recipients" rows="9" placeholder="name&#9;receiver_email&#9;message&#9;attachment&#10;Sita Rai&#9;sita@gmail.com&#9;&#9;&#10;&#10;Or paste only email addresses, one per line.">{{ v.recipients }}</textarea>
+<div class="hint">Columns: <code>receiver_email</code> (required); <code>name</code>, <code>message</code>, <code>greeting</code>, <code>subject</code>, <code>attachment</code> (optional). Up to 1000 rows.</div>
+<label>or load a CSV file into the box above</label><input id="csvfile" type="file" accept=".csv,.tsv,.txt,text/csv">
+
 <label>Attachments (optional)</label><input type="file" name="files" multiple>
 <div class="hint">Upload every file named in the <code>attachment</code> column (use ; between several). Max 10 MB per file, 20 MB total.</div>
-<label class="chk"><input type="checkbox" name="skip_sent" value="1" checked> Skip people already emailed before (from any account)</label>
-<div class="actions"><button class="btn" {% if not accounts %}disabled{% endif %}>Create &amp; preview</button></div>
+<label class="chk"><input type="checkbox" name="skip_sent" value="1" {% if v.skip_sent %}checked{% endif %}> Skip people already emailed before (from any account)</label>
+<div class="actions"><button class="btn" {% if not accounts %}disabled{% endif %}>Create &amp; review</button></div>
 </form>
+
+<div class="card sticky"><b>Live preview</b> <span class="hint">(shows the first recipient)</span>
+<div id="sum" class="hint"></div>
+<iframe id="pv" class="pv" sandbox title="Email preview"></iframe></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ nonce }}">
+(function(){
+  var f=document.getElementById('f'), pv=document.getElementById('pv'), sum=document.getElementById('sum'), t=null;
+  function names(){var i=f.querySelector('input[name=files]'),a=[],k; if(i&&i.files){for(k=0;k<i.files.length;k++){a.push(i.files[k].name);}} return a;}
+  function update(){
+    var fd=new FormData(f); fd.delete('files'); fd.set('file_names', names().join('\n'));
+    fetch('/preview/live',{method:'POST',body:fd,credentials:'same-origin'})
+      .then(function(r){return r.json();})
+      .then(function(d){pv.srcdoc=d.html; sum.textContent=d.summary;})
+      .catch(function(){});
+  }
+  function sched(){clearTimeout(t); t=setTimeout(update,400);}
+  f.addEventListener('input',sched); f.addEventListener('change',sched);
+  var csvf=document.getElementById('csvfile');
+  csvf.addEventListener('change',function(){
+    var file=csvf.files[0]; if(!file){return;}
+    file.text().then(function(x){f.querySelector('textarea[name=recipients]').value=x; sched();});
+  });
+  update();
+})();
+</script>
 {% endblock %}

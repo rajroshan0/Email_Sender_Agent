@@ -29,7 +29,7 @@ background; the page shows live progress. People already emailed are skipped.
 6. Open your address, log in with the team password, go to **Gmail accounts** and press
    **Connect a Gmail account** for each account (log in, Advanced > Go to app > Allow).
 7. **Design & settings:** brand, title, logo, contact button link, footer, colors, limits.
-8. **New send:** choose account, upload CSV (+ attachment files), check the preview, press Send.
+8. **New send:** choose account and design, paste recipients, write the message, check the live preview, press Send.
 
 ## Using the free web plan
 - The app sleeps after 15 minutes without visits. Opening the page wakes it (about a minute).
@@ -39,10 +39,16 @@ background; the page shows live progress. People already emailed are skipped.
   before retrying it.
 - Free plans have 750 hours per month, which is plenty for occasional use.
 
-## CSV format
-`receiver_email`, `message` required. Optional: `name`, `greeting`, `subject`, `attachment`
-(file names, `;` between several; upload the files in the same form). Save as CSV UTF-8.
-`{name}` inside message or subject is replaced by the name.
+## Recipients: paste them in
+On **New send**, copy rows from Excel or Google Sheets (with the header row) and paste them into the box.
+Columns: `receiver_email` (required); `name`, `message`, `greeting`, `subject`, `attachment` (optional;
+file names, `;` between several; upload those files in the same form). You can also paste only email
+addresses, one per line, or load a CSV file into the box. `{name}` inside a message or subject is replaced
+by the name. A row's own `message` wins; rows without one get the "Message for everyone" text.
+
+## Two designs, edited per send
+Choose **Classic** or **Minimal** on each send and edit title, subtitle, button, subject and the two colors.
+The preview on the right updates as you type. The defaults come from **Design & settings**.
 
 ## Good to know
 - Keep `--workers 1` in the start command (the background sender lives inside the app).
